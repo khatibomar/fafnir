@@ -37,6 +37,16 @@ func (f *Fafnir) Add(queueName, url, path, name string) {
 	f.Queues = append(f.Queues, q)
 }
 
+func (f *Fafnir) AddQueue(queue *Queue) {
+	for _, q := range f.Queues {
+		if q.Name == queue.Name {
+			q.Entries = append(q.Entries, queue.Entries...)
+			break
+		}
+	}
+	f.Queues = append(f.Queues, queue)
+}
+
 func (f *Fafnir) StartQueueDownload(queueName string) error {
 	var que *Queue
 	for _, q := range f.Queues {
