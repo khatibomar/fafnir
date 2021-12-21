@@ -53,24 +53,22 @@ func (f *Fafnir) Add(queueName, url, path, name string) error {
 	return f.Cfg.Repo.Add(queueName, e)
 }
 
-func (f *Fafnir) StartQueueDownload(queueName string, errChan chan<- error) {
+func (f *Fafnir) StartQueueDownload(queueName string) error {
 	que, err := f.Cfg.Repo.Get(queueName)
 	if err != nil {
-		errChan <- err
-		return
+		return err
 	}
 	if que == nil {
-		errChan <- ErrQueueNotFound
-		return
+		return ErrQueueNotFound
 	} else if len(que.Entries) == 0 {
-		errChan <- ErrEmptyQueue
-		return
+		return ErrEmptyQueue
 	} else {
-		jobsChan := make(chan Entry, len(que.Entries))
-		errortoChan := make(chan error, len(que.Entries))
+		numJobs := len(que.Entries)
+		jobsChan := make(chan Entry, numJobs)
+		doneChan := make(chan bool, numJobs)
 
 		for w := 1; w <= f.Cfg.MaxConcurrentDownloads; w++ {
-			go f.Download(jobsChan, errortoChan)
+			go f.Download(jobsChan, doneChan)
 		}
 
 		for _, j := range que.Entries {
@@ -78,25 +76,26 @@ func (f *Fafnir) StartQueueDownload(queueName string, errChan chan<- error) {
 		}
 		close(jobsChan)
 
-		for i := 0; i < len(que.Entries); i++ {
-			err = <-errortoChan
-			errChan <- err
+		for i := 0; i < numJobs; i++ {
+			<-doneChan
 		}
-		close(errortoChan)
 	}
+	return nil
 }
 
-func (f *Fafnir) Download(jobsChan <-chan Entry, errChan chan<- error) {
+func (f *Fafnir) Download(jobsChan <-chan Entry, doneChan chan<- bool) {
 	for j := range jobsChan {
 		err := os.MkdirAll(j.DwnDir, 0777)
 		if err != nil {
-			errChan <- err
+			j.ExtraData.Err = err
+			f.Cfg.Repo.Update(j)
 			return
 		}
 		client := grab.NewClient()
 		req, err := grab.NewRequest(path.Join(j.DwnDir, j.Filename), j.Url)
 		if err != nil {
-			errChan <- err
+			j.ExtraData.Err = err
+			f.Cfg.Repo.Update(j)
 			return
 		}
 		resp := client.Do(req)
@@ -104,7 +103,7 @@ func (f *Fafnir) Download(jobsChan <-chan Entry, errChan chan<- error) {
 		// TODO(khatibomar): this is ugly unacceptable
 		// need to take a look at how to make it better
 		// with less repeatable code
-		go func(r *grab.Response, e Entry, errChan chan<- error) {
+		go func(r *grab.Response, e Entry) {
 			t := time.NewTicker(500 * time.Millisecond)
 			defer t.Stop()
 			for {
@@ -135,10 +134,10 @@ func (f *Fafnir) Download(jobsChan <-chan Entry, errChan chan<- error) {
 					e.ExtraData.Start = resp.Start
 					e.ExtraData.Err = resp.Err()
 					f.Cfg.Repo.Update(e)
-					errChan <- nil
+					doneChan <- true
 					return
 				}
 			}
-		}(resp, j, errChan)
+		}(resp, j)
 	}
 }
