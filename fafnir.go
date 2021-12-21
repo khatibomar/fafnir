@@ -53,42 +53,58 @@ func (f *Fafnir) Add(queueName, url, path, name string) error {
 	return f.Cfg.Repo.Add(queueName, e)
 }
 
-func (f *Fafnir) StartQueueDownload(queueName string) error {
+func (f *Fafnir) StartQueueDownload(queueName string, errChan chan<- error) {
 	que, err := f.Cfg.Repo.Get(queueName)
 	if err != nil {
-		return err
+		errChan <- err
+		return
 	}
 	if que == nil {
-		return ErrQueueNotFound
+		errChan <- ErrQueueNotFound
+		return
 	} else if len(que.Entries) == 0 {
-		return ErrEmptyQueue
+		errChan <- ErrEmptyQueue
+		return
 	} else {
 		jobsChan := make(chan Entry, len(que.Entries))
+		errortoChan := make(chan error, len(que.Entries))
 
 		for w := 1; w <= f.Cfg.MaxConcurrentDownloads; w++ {
-			go f.Download(jobsChan)
+			go f.Download(jobsChan, errortoChan)
 		}
 
 		for _, j := range que.Entries {
 			jobsChan <- j
 		}
 		close(jobsChan)
+
+		for i := 0; i < len(que.Entries); i++ {
+			err = <-errortoChan
+			errChan <- err
+		}
+		close(errortoChan)
 	}
-	return nil
 }
 
-func (f *Fafnir) Download(jobsChan <-chan Entry) {
+func (f *Fafnir) Download(jobsChan <-chan Entry, errChan chan<- error) {
 	for j := range jobsChan {
 		err := os.MkdirAll(j.DwnDir, 0777)
 		if err != nil {
+			errChan <- err
 			return
 		}
-		resp, err := grab.Get(path.Join(j.DwnDir, j.Filename), j.Url)
+		client := grab.NewClient()
+		req, err := grab.NewRequest(path.Join(j.DwnDir, j.Filename), j.Url)
 		if err != nil {
+			errChan <- err
 			return
 		}
+		resp := client.Do(req)
 
-		go func(r *grab.Response, e Entry) {
+		// TODO(khatibomar): this is ugly unacceptable
+		// need to take a look at how to make it better
+		// with less repeatable code
+		go func(r *grab.Response, e Entry, errChan chan<- error) {
 			t := time.NewTicker(500 * time.Millisecond)
 			defer t.Stop()
 			for {
@@ -107,11 +123,22 @@ func (f *Fafnir) Download(jobsChan <-chan Entry) {
 					f.Cfg.Repo.Update(e)
 				case <-resp.Done:
 					// download is complete
+					e.ExtraData.BytesPerSecond = resp.BytesPerSecond()
+					e.ExtraData.BytesTransfered = uint64(resp.BytesComplete())
+					e.ExtraData.CanResume = resp.CanResume
+					e.ExtraData.DidResume = resp.DidResume
+					e.ExtraData.Duration = resp.Duration()
+					e.ExtraData.ETA = resp.ETA()
+					e.ExtraData.End = resp.End
+					e.ExtraData.Progress = resp.Progress()
+					e.ExtraData.Size = uint64(resp.Size)
+					e.ExtraData.Start = resp.Start
 					e.ExtraData.Err = resp.Err()
 					f.Cfg.Repo.Update(e)
+					errChan <- nil
 					return
 				}
 			}
-		}(resp, j)
+		}(resp, j, errChan)
 	}
 }
