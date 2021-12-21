@@ -1,8 +1,10 @@
 package fafnir
 
 import (
+	"context"
 	"os"
 	"path"
+	"sync"
 	"time"
 
 	"github.com/cavaliercoder/grab"
@@ -13,23 +15,22 @@ type Repository interface {
 	EntryRepository
 }
 
-type FafnirConfig struct {
+type Config struct {
+	// ErrCh!=nil means errors during download are sent to
+	// this channel for the client to consume.
+	ErrChan                chan error
 	MaxConcurrentDownloads int
 	Repo                   Repository
-}
-
-func NewFafnirConfig(maxConcurrentDownloads int, repo Repository) *FafnirConfig {
-	return &FafnirConfig{
-		MaxConcurrentDownloads: maxConcurrentDownloads,
-		Repo:                   repo,
-	}
+	// WaitGroup!=nil will update the wait group as goroutines
+	// are started and finished.
+	WaitGroup *sync.WaitGroup
 }
 
 type Fafnir struct {
-	Cfg *FafnirConfig
+	Cfg *Config
 }
 
-func NewFafnir(cfg *FafnirConfig) (*Fafnir, error) {
+func New(cfg *Config) (*Fafnir, error) {
 	return &Fafnir{
 		Cfg: cfg,
 	}, nil
@@ -54,6 +55,10 @@ func (f *Fafnir) Add(queueName, url, path, name string) error {
 }
 
 func (f *Fafnir) StartQueueDownload(queueName string) error {
+	return f.StartQueueDownloadWithCtx(context.Background(), queueName)
+}
+
+func (f *Fafnir) StartQueueDownloadWithCtx(ctx context.Context, queueName string) error {
 	que, err := f.Cfg.Repo.Get(queueName)
 	if err != nil {
 		return err
@@ -67,8 +72,12 @@ func (f *Fafnir) StartQueueDownload(queueName string) error {
 		jobsChan := make(chan Entry, numJobs)
 		doneChan := make(chan bool, numJobs)
 
+		wg := f.Cfg.WaitGroup
+		if wg == nil {
+			wg = &sync.WaitGroup{}
+		}
 		for w := 1; w <= f.Cfg.MaxConcurrentDownloads; w++ {
-			go f.Download(jobsChan, doneChan)
+			go f.download(ctx, wg, jobsChan, doneChan)
 		}
 
 		for _, j := range que.Entries {
@@ -83,7 +92,7 @@ func (f *Fafnir) StartQueueDownload(queueName string) error {
 	return nil
 }
 
-func (f *Fafnir) Download(jobsChan <-chan Entry, doneChan chan<- bool) {
+func (f *Fafnir) download(ctx context.Context, wg *sync.WaitGroup, jobsChan <-chan Entry, doneChan chan<- bool) {
 	for j := range jobsChan {
 		err := os.MkdirAll(j.DwnDir, 0777)
 		if err != nil {
@@ -103,7 +112,9 @@ func (f *Fafnir) Download(jobsChan <-chan Entry, doneChan chan<- bool) {
 		// TODO(khatibomar): this is ugly unacceptable
 		// need to take a look at how to make it better
 		// with less repeatable code
+		wg.Add(1)
 		go func(r *grab.Response, e Entry) {
+			defer wg.Done()
 			t := time.NewTicker(500 * time.Millisecond)
 			defer t.Stop()
 			for {
@@ -132,9 +143,22 @@ func (f *Fafnir) Download(jobsChan <-chan Entry, doneChan chan<- bool) {
 					e.ExtraData.Progress = resp.Progress()
 					e.ExtraData.Size = uint64(resp.Size)
 					e.ExtraData.Start = resp.Start
-					e.ExtraData.Err = resp.Err()
+					dlerr := resp.Err()
+					if dlerr != nil {
+						e.ExtraData.Err = dlerr
+						select {
+						case f.Cfg.ErrChan <- err:
+						default:
+						}
+					}
 					f.Cfg.Repo.Update(e)
 					doneChan <- true
+					return
+				case <-ctx.Done():
+					err := resp.Cancel()
+					if err != nil {
+						f.Cfg.ErrChan <- err
+					}
 					return
 				}
 			}
