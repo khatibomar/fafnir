@@ -10,10 +10,11 @@ var (
 	ErrQueueNotFound = fmt.Errorf("Queue doesn't exist")
 )
 
-type Entry struct {
-	Filename string
-	DwnDir   string
-	Url      string
+type QueueRepository interface {
+	Fetch() ([]*Queue, error)
+	Create(string) error
+	Delete(string) error
+	Get(string) (*Queue, error)
 }
 
 type Queue struct {
