@@ -93,19 +93,23 @@ func (f *Fafnir) StartQueueDownloadWithCtx(ctx context.Context, queueName string
 }
 
 func (f *Fafnir) download(ctx context.Context, wg *sync.WaitGroup, jobsChan <-chan Entry, doneChan chan<- bool) {
-	for j := range jobsChan {
-		err := os.MkdirAll(j.DwnDir, 0777)
+	for e := range jobsChan {
+		err := os.MkdirAll(e.DwnDir, 0777)
 		if err != nil {
-			j.ExtraData.Err = err
-			f.Cfg.Repo.Update(j)
-			return
+			e.ExtraData.Err = err
+			f.Cfg.Repo.Update(e)
+			f.Cfg.ErrChan <- err
+			doneChan <- true
+			continue
 		}
 		client := grab.NewClient()
-		req, err := grab.NewRequest(path.Join(j.DwnDir, j.Filename), j.Url)
+		req, err := grab.NewRequest(path.Join(e.DwnDir, e.Filename), e.Url)
 		if err != nil {
-			j.ExtraData.Err = err
-			f.Cfg.Repo.Update(j)
-			return
+			e.ExtraData.Err = err
+			f.Cfg.Repo.Update(e)
+			f.Cfg.ErrChan <- err
+			doneChan <- true
+			continue
 		}
 		resp := client.Do(req)
 
@@ -113,10 +117,10 @@ func (f *Fafnir) download(ctx context.Context, wg *sync.WaitGroup, jobsChan <-ch
 		// need to take a look at how to make it better
 		// with less repeatable code
 		wg.Add(1)
-		go func(r *grab.Response, e Entry) {
-			defer wg.Done()
-			t := time.NewTicker(500 * time.Millisecond)
-			defer t.Stop()
+		defer wg.Done()
+		t := time.NewTicker(500 * time.Millisecond)
+		defer t.Stop()
+		func() {
 			for {
 				select {
 				case <-t.C:
@@ -159,9 +163,10 @@ func (f *Fafnir) download(ctx context.Context, wg *sync.WaitGroup, jobsChan <-ch
 					if err != nil {
 						f.Cfg.ErrChan <- err
 					}
+					doneChan <- true
 					return
 				}
 			}
-		}(resp, j)
+		}()
 	}
 }
