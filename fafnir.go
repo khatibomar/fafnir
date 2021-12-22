@@ -93,6 +93,7 @@ func (f *Fafnir) StartQueueDownloadWithCtx(ctx context.Context, queueName string
 }
 
 func (f *Fafnir) download(ctx context.Context, wg *sync.WaitGroup, jobsChan <-chan Entry, doneChan chan<- bool) {
+	client := grab.NewClient()
 	for e := range jobsChan {
 		err := os.MkdirAll(e.DwnDir, 0777)
 		if err != nil {
@@ -102,7 +103,6 @@ func (f *Fafnir) download(ctx context.Context, wg *sync.WaitGroup, jobsChan <-ch
 			doneChan <- true
 			continue
 		}
-		client := grab.NewClient()
 		req, err := grab.NewRequest(path.Join(e.DwnDir, e.Filename), e.Url)
 		if err != nil {
 			e.ExtraData.Err = err
