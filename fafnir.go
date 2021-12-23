@@ -23,6 +23,10 @@ type Config struct {
 	// MaxFailError is the maximum number that an entry can fail
 	// after failing N times it will not make it will not be re-queued
 	MaxFailError uint
+	// UpdateTimeMs specify the rate of which the info about the
+	// entity that is currently downloading should be updated ,
+	// this should be in millisecond (ms)
+	UpdateTimeMs uint
 	Repo         Repository
 	// WaitGroup!=nil will update the wait group as goroutines
 	// are started and finished.
@@ -142,7 +146,7 @@ func (f *Fafnir) download(ctx context.Context, wg *sync.WaitGroup, queue *Queue,
 		// with less repeatable code
 		wg.Add(1)
 		defer wg.Done()
-		t := time.NewTicker(500 * time.Millisecond)
+		t := time.NewTicker(time.Duration(f.Cfg.UpdateTimeMs) * time.Millisecond)
 		defer t.Stop()
 		func(e Entry) {
 			for {
