@@ -96,6 +96,24 @@ func (f *Fafnir) StartQueueDownloadWithCtx(ctx context.Context, queueName string
 
 		for {
 			if len(que.Entries) == 0 {
+				// get all entries in failed entries that
+				// didn't yet reach max allowed failing
+				// count
+				for _, fe := range que.FailedEntries {
+					_, err := que.DeQueueFail()
+					if err != nil {
+						f.Cfg.ErrChan <- err
+						continue
+					}
+					if fe.ExtraData.FailCount < int(f.Cfg.MaxFailError) {
+						que.EnQueue(fe)
+					} else {
+						que.EnQueueFail(fe)
+					}
+				}
+				if len(que.Entries) > 0 {
+					continue
+				}
 				break
 			}
 			j, err := que.DeQueue()
@@ -110,21 +128,6 @@ func (f *Fafnir) StartQueueDownloadWithCtx(ctx context.Context, queueName string
 				continue
 			}
 			jobsChan <- j
-			// get all entries in failed entries that
-			// didn't yet reach max allowed failing
-			// count
-			for _, fe := range que.FailedEntries {
-				_, err = que.DeQueueFail()
-				if err != nil {
-					f.Cfg.ErrChan <- err
-					continue
-				}
-				if j.ExtraData.FailCount < int(f.Cfg.MaxFailError) {
-					que.EnQueue(fe)
-				} else {
-					que.EnQueueFail(fe)
-				}
-			}
 		}
 		close(jobsChan)
 	}
@@ -161,29 +164,11 @@ func (f *Fafnir) download(ctx context.Context, wg *sync.WaitGroup, queue *Queue,
 			for {
 				select {
 				case <-t.C:
-					e.ExtraData.BytesPerSecond = resp.BytesPerSecond()
-					e.ExtraData.BytesTransfered = uint64(resp.BytesComplete())
-					e.ExtraData.CanResume = resp.CanResume
-					e.ExtraData.DidResume = resp.DidResume
-					e.ExtraData.Duration = resp.Duration()
-					e.ExtraData.ETA = resp.ETA()
-					e.ExtraData.End = resp.End
-					e.ExtraData.Progress = resp.Progress()
-					e.ExtraData.Size = uint64(resp.Size)
-					e.ExtraData.Start = resp.Start
+					f.updateEntryHelper(resp, &e)
 					f.Cfg.Repo.Update(e)
 				case <-resp.Done:
+					f.updateEntryHelper(resp, &e)
 					// download is complete
-					e.ExtraData.BytesPerSecond = resp.BytesPerSecond()
-					e.ExtraData.BytesTransfered = uint64(resp.BytesComplete())
-					e.ExtraData.CanResume = resp.CanResume
-					e.ExtraData.DidResume = resp.DidResume
-					e.ExtraData.Duration = resp.Duration()
-					e.ExtraData.ETA = resp.ETA()
-					e.ExtraData.End = resp.End
-					e.ExtraData.Progress = resp.Progress()
-					e.ExtraData.Size = uint64(resp.Size)
-					e.ExtraData.Start = resp.Start
 					dlerr := resp.Err()
 					if dlerr != nil {
 						e.ExtraData.FailCount++
@@ -209,4 +194,17 @@ func (f *Fafnir) download(ctx context.Context, wg *sync.WaitGroup, queue *Queue,
 			}
 		}(e)
 	}
+}
+
+func (f *Fafnir) updateEntryHelper(resp *grab.Response, e *Entry) {
+	e.ExtraData.BytesPerSecond = resp.BytesPerSecond()
+	e.ExtraData.BytesTransfered = uint64(resp.BytesComplete())
+	e.ExtraData.CanResume = resp.CanResume
+	e.ExtraData.DidResume = resp.DidResume
+	e.ExtraData.Duration = resp.Duration()
+	e.ExtraData.ETA = resp.ETA()
+	e.ExtraData.End = resp.End
+	e.ExtraData.Progress = resp.Progress()
+	e.ExtraData.Size = uint64(resp.Size)
+	e.ExtraData.Start = resp.Start
 }
