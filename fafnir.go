@@ -38,6 +38,15 @@ type Fafnir struct {
 }
 
 func New(cfg *Config) (*Fafnir, error) {
+	if cfg.UpdateTimeMs == 0 {
+		cfg.UpdateTimeMs = 500
+	}
+	if cfg.MaxConcurrentDownloads == 0 {
+		cfg.MaxConcurrentDownloads = 2
+	}
+	if cfg.MaxFailError == 0 {
+		cfg.MaxFailError = 3
+	}
 	return &Fafnir{
 		Cfg: cfg,
 	}, nil
