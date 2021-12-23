@@ -16,6 +16,7 @@ type Entry struct {
 }
 
 type EntryExtraData struct {
+	FailCount       int
 	Size            uint64
 	BytesTransfered uint64
 	BytesPerSecond  float64

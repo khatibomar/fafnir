@@ -18,9 +18,10 @@ type QueueRepository interface {
 }
 
 type Queue struct {
-	Name    string
-	Entries []Entry
-	mu      sync.Mutex
+	Name          string
+	Entries       []Entry
+	FailedEntries []Entry
+	mu            sync.Mutex
 }
 
 func NewQueue(name string) *Queue {
@@ -44,5 +45,23 @@ func (q *Queue) DeQueue() (Entry, error) {
 	}
 	e := q.Entries[0]
 	q.Entries = q.Entries[1:]
+	return e, nil
+}
+
+func (q *Queue) EnQueueFail(e Entry) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.FailedEntries = append(q.FailedEntries, e)
+	return nil
+}
+
+func (q *Queue) DeQueueFail() (Entry, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if len(q.Entries) == 0 {
+		return Entry{}, ErrEmptyQueue
+	}
+	e := q.FailedEntries[0]
+	q.FailedEntries = q.FailedEntries[1:]
 	return e, nil
 }

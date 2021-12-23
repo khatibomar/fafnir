@@ -7,7 +7,7 @@
 
 # Test binary, built with `go test -c`
 *.test
-downloader_test.go
+fafnir_test.go
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
