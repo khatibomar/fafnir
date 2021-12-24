@@ -37,9 +37,15 @@ func (repo *InMemoryRepo) Update(e fafnir.Entry) error {
 	return nil
 }
 
-func (repo *InMemoryRepo) Add(queueName string, e fafnir.Entry) error {
+func (repo *InMemoryRepo) Add(queueName, link, dwnDir, filename string) error {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
+	var e fafnir.Entry
+	e.ID = repo.EID
+	e.Filename = filename
+	e.DwnDir = dwnDir
+	e.Url = link
+	repo.Create(queueName)
 	for _, q := range repo.Queues {
 		if queueName == q.Name {
 			e.ID = repo.EID
@@ -80,7 +86,7 @@ func (repo *InMemoryRepo) Delete(queueName string) error {
 	return ErrQueueNotFound
 }
 
-func (repo *InMemoryRepo) Get(queueName string) (*fafnir.Queue, error) {
+func (repo *InMemoryRepo) Get(queueName string, errChan chan error) (*fafnir.Queue, error) {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
 	for _, q := range repo.Queues {
