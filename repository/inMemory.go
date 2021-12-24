@@ -45,7 +45,6 @@ func (repo *InMemoryRepo) Add(queueName, link, dwnDir, filename string) error {
 	e.Filename = filename
 	e.DwnDir = dwnDir
 	e.Url = link
-	repo.Create(queueName)
 	for _, q := range repo.Queues {
 		if queueName == q.Name {
 			e.ID = repo.EID
