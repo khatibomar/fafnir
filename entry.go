@@ -4,7 +4,7 @@ import "time"
 
 type EntryRepository interface {
 	Update(Entry) error
-	Add(string, Entry) error
+	Add(string, string, string, string) error
 }
 
 type Entry struct {
@@ -17,8 +17,8 @@ type Entry struct {
 
 type EntryExtraData struct {
 	FailCount       int
-	Size            uint64
-	BytesTransfered uint64
+	Size            int64
+	BytesTransfered int64
 	BytesPerSecond  float64
 	ETA             time.Time
 	Err             error

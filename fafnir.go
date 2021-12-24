@@ -52,22 +52,9 @@ func New(cfg *Config) (*Fafnir, error) {
 	}, nil
 }
 
-func (f *Fafnir) Add(queueName, url, path, name string) error {
-	var e Entry
-
-	e.DwnDir = path
-	e.Filename = name
-	e.Url = url
-
-	_, err := f.Cfg.Repo.Get(queueName)
-
-	if err != nil {
-		err := f.Cfg.Repo.Create(queueName)
-		if err != nil {
-			return err
-		}
-	}
-	return f.Cfg.Repo.Add(queueName, e)
+func (f *Fafnir) Add(queueName, link, dwnDir, filename string) error {
+	f.Cfg.Repo.Create(queueName)
+	return f.Cfg.Repo.Add(queueName, link, dwnDir, filename)
 }
 
 func (f *Fafnir) StartQueueDownload(queueName string) error {
@@ -75,7 +62,12 @@ func (f *Fafnir) StartQueueDownload(queueName string) error {
 }
 
 func (f *Fafnir) StartQueueDownloadWithCtx(ctx context.Context, queueName string) error {
-	que, err := f.Cfg.Repo.Get(queueName)
+	wg := f.Cfg.WaitGroup
+	if wg == nil {
+		wg = &sync.WaitGroup{}
+	}
+	defer wg.Wait()
+	que, err := f.Cfg.Repo.Get(queueName, f.Cfg.ErrChan)
 	if err != nil {
 		return err
 	}
@@ -86,10 +78,6 @@ func (f *Fafnir) StartQueueDownloadWithCtx(ctx context.Context, queueName string
 	} else {
 		jobsChan := make(chan Entry, f.Cfg.MaxConcurrentDownloads)
 
-		wg := f.Cfg.WaitGroup
-		if wg == nil {
-			wg = &sync.WaitGroup{}
-		}
 		for w := 1; w <= int(f.Cfg.MaxConcurrentDownloads); w++ {
 			go f.download(ctx, wg, que, jobsChan)
 		}
@@ -127,6 +115,7 @@ func (f *Fafnir) StartQueueDownloadWithCtx(ctx context.Context, queueName string
 				}
 				continue
 			}
+			wg.Add(1)
 			jobsChan <- j
 		}
 		close(jobsChan)
@@ -140,24 +129,25 @@ func (f *Fafnir) download(ctx context.Context, wg *sync.WaitGroup, queue *Queue,
 		err := os.MkdirAll(e.DwnDir, 0777)
 		if err != nil {
 			e.ExtraData.Err = err
-			f.Cfg.Repo.Update(e)
+			err2 := f.Cfg.Repo.Update(e)
+			if err2 != nil {
+				f.Cfg.ErrChan <- err2
+			}
 			f.Cfg.ErrChan <- err
 			continue
 		}
 		req, err := grab.NewRequest(path.Join(e.DwnDir, e.Filename), e.Url)
 		if err != nil {
 			e.ExtraData.Err = err
-			f.Cfg.Repo.Update(e)
+			err2 := f.Cfg.Repo.Update(e)
+			if err2 != nil {
+				f.Cfg.ErrChan <- err2
+			}
 			f.Cfg.ErrChan <- err
 			continue
 		}
 		resp := client.Do(req)
 
-		// TODO(khatibomar): this is ugly unacceptable
-		// need to take a look at how to make it better
-		// with less repeatable code
-		wg.Add(1)
-		defer wg.Done()
 		t := time.NewTicker(time.Duration(f.Cfg.UpdateTimeMs) * time.Millisecond)
 		defer t.Stop()
 		func(e Entry) {
@@ -165,7 +155,10 @@ func (f *Fafnir) download(ctx context.Context, wg *sync.WaitGroup, queue *Queue,
 				select {
 				case <-t.C:
 					f.updateEntryHelper(resp, &e)
-					f.Cfg.Repo.Update(e)
+					err = f.Cfg.Repo.Update(e)
+					if err != nil {
+						f.Cfg.ErrChan <- err
+					}
 				case <-resp.Done:
 					f.updateEntryHelper(resp, &e)
 					// download is complete
@@ -173,13 +166,14 @@ func (f *Fafnir) download(ctx context.Context, wg *sync.WaitGroup, queue *Queue,
 					if dlerr != nil {
 						e.ExtraData.FailCount++
 						e.ExtraData.Err = dlerr
-						select {
-						case f.Cfg.ErrChan <- err:
-						default:
-						}
+						f.Cfg.ErrChan <- err
 						queue.EnQueueFail(e)
 					}
-					f.Cfg.Repo.Update(e)
+					err = f.Cfg.Repo.Update(e)
+					if err != nil {
+						f.Cfg.ErrChan <- err
+					}
+					wg.Done()
 					return
 				case <-ctx.Done():
 					e.ExtraData.FailCount++
@@ -188,7 +182,11 @@ func (f *Fafnir) download(ctx context.Context, wg *sync.WaitGroup, queue *Queue,
 						f.Cfg.ErrChan <- err
 					}
 					queue.EnQueueFail(e)
-					f.Cfg.Repo.Update(e)
+					err = f.Cfg.Repo.Update(e)
+					if err != nil {
+						f.Cfg.ErrChan <- err
+					}
+					wg.Done()
 					return
 				}
 			}
@@ -198,13 +196,13 @@ func (f *Fafnir) download(ctx context.Context, wg *sync.WaitGroup, queue *Queue,
 
 func (f *Fafnir) updateEntryHelper(resp *grab.Response, e *Entry) {
 	e.ExtraData.BytesPerSecond = resp.BytesPerSecond()
-	e.ExtraData.BytesTransfered = uint64(resp.BytesComplete())
+	e.ExtraData.BytesTransfered = resp.BytesComplete()
 	e.ExtraData.CanResume = resp.CanResume
 	e.ExtraData.DidResume = resp.DidResume
 	e.ExtraData.Duration = resp.Duration()
 	e.ExtraData.ETA = resp.ETA()
 	e.ExtraData.End = resp.End
 	e.ExtraData.Progress = resp.Progress()
-	e.ExtraData.Size = uint64(resp.Size)
+	e.ExtraData.Size = resp.Size
 	e.ExtraData.Start = resp.Start
 }

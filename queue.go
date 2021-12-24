@@ -14,7 +14,7 @@ type QueueRepository interface {
 	Fetch() ([]*Queue, error)
 	Create(string) error
 	Delete(string) error
-	Get(string) (*Queue, error)
+	Get(string, chan error) (*Queue, error)
 }
 
 type Queue struct {
@@ -58,7 +58,7 @@ func (q *Queue) EnQueueFail(e Entry) error {
 func (q *Queue) DeQueueFail() (Entry, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if len(q.Entries) == 0 {
+	if len(q.FailedEntries) == 0 {
 		return Entry{}, ErrEmptyQueue
 	}
 	e := q.FailedEntries[0]
