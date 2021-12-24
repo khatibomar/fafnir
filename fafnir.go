@@ -66,44 +66,22 @@ func (f *Fafnir) StartQueueDownloadWithCtx(ctx context.Context, queueName string
 	if wg == nil {
 		wg = &sync.WaitGroup{}
 	}
-	defer wg.Wait()
+	jobsChan := make(chan Entry, f.Cfg.MaxConcurrentDownloads)
 	que, err := f.Cfg.Repo.Get(queueName, f.Cfg.ErrChan)
 	if err != nil {
 		return err
 	}
+LOOP:
 	if que == nil {
 		return ErrQueueNotFound
 	} else if len(que.Entries) == 0 {
 		return ErrEmptyQueue
 	} else {
-		jobsChan := make(chan Entry, f.Cfg.MaxConcurrentDownloads)
-
 		for w := 1; w <= int(f.Cfg.MaxConcurrentDownloads); w++ {
 			go f.download(ctx, wg, que, jobsChan)
 		}
 
-		for {
-			if len(que.Entries) == 0 {
-				// get all entries in failed entries that
-				// didn't yet reach max allowed failing
-				// count
-				for _, fe := range que.FailedEntries {
-					_, err := que.DeQueueFail()
-					if err != nil {
-						f.Cfg.ErrChan <- err
-						continue
-					}
-					if fe.ExtraData.FailCount < int(f.Cfg.MaxFailError) {
-						que.EnQueue(fe)
-					} else {
-						que.EnQueueFail(fe)
-					}
-				}
-				if len(que.Entries) > 0 {
-					continue
-				}
-				break
-			}
+		for len(que.Entries) > 0 {
 			j, err := que.DeQueue()
 			if err != nil {
 				continue
@@ -118,8 +96,18 @@ func (f *Fafnir) StartQueueDownloadWithCtx(ctx context.Context, queueName string
 			wg.Add(1)
 			jobsChan <- j
 		}
-		close(jobsChan)
 	}
+	wg.Wait()
+	if len(que.Entries) > 0 {
+		goto LOOP
+	}
+	if len(que.Entries) == 0 && len(que.FailedEntries) == 0 {
+		err = f.Cfg.Repo.Delete(queueName)
+		if err != nil {
+			return err
+		}
+	}
+	close(jobsChan)
 	return nil
 }
 
@@ -166,8 +154,17 @@ func (f *Fafnir) download(ctx context.Context, wg *sync.WaitGroup, queue *Queue,
 					if dlerr != nil {
 						e.ExtraData.FailCount++
 						e.ExtraData.Err = dlerr
-						f.Cfg.ErrChan <- err
-						queue.EnQueueFail(e)
+						f.Cfg.ErrChan <- dlerr
+						if e.ExtraData.FailCount < int(f.Cfg.MaxFailError) {
+							queue.EnQueue(e)
+						} else {
+							queue.EnQueueFail(e)
+						}
+					} else {
+						err = f.Cfg.Repo.Complete(e)
+						if err != nil {
+							f.Cfg.ErrChan <- err
+						}
 					}
 					err = f.Cfg.Repo.Update(e)
 					if err != nil {
@@ -186,6 +183,11 @@ func (f *Fafnir) download(ctx context.Context, wg *sync.WaitGroup, queue *Queue,
 					if err != nil {
 						f.Cfg.ErrChan <- err
 					}
+					// NOTE(khatibomar): based on discord discussion
+					// there must be exactly one wg.Add(1) for every wg.Done()
+					// or wg.Add(n) where all the n add up to the number of wg.Done() calls
+					// so if you call Done when you get a ctx.Cancel
+					// you must call Add when you do the cancel. but don't do that it's way too complicated
 					wg.Done()
 					return
 				}

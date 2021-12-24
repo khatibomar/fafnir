@@ -184,7 +184,7 @@ func (r *dbRepo) Get(queueName string, errChan chan error) (*fafnir.Queue, error
 	defer rows.Close()
 
 	var (
-		QID             int
+		QID             sql.NullInt32
 		ID              int
 		Filename        string
 		DwnDir          string
@@ -229,4 +229,23 @@ func (r *dbRepo) Get(queueName string, errChan chan error) (*fafnir.Queue, error
 	}
 
 	return q, nil
+}
+
+func (r *dbRepo) Complete(e fafnir.Entry) error {
+	r.Lock()
+	defer r.Unlock()
+
+	// Prepare INSERT statement
+	insStmt, err := r.db.Prepare("UPDATE entry SET queue_id=NULL where id=?")
+	if err != nil {
+		return err
+	}
+	defer insStmt.Close()
+
+	// Exec INSERT statement
+	_, err = insStmt.Exec(e.ID)
+	if err != nil {
+		return err
+	}
+	return nil
 }

@@ -96,3 +96,7 @@ func (repo *InMemoryRepo) Get(queueName string, errChan chan error) (*fafnir.Que
 	}
 	return nil, ErrQueueNotFound
 }
+
+func (repo *InMemoryRepo) Complete(e fafnir.Entry) error {
+	return nil
+}

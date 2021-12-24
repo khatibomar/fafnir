@@ -5,6 +5,7 @@ import "time"
 type EntryRepository interface {
 	Update(Entry) error
 	Add(string, string, string, string) error
+	Complete(Entry) error
 }
 
 type Entry struct {
