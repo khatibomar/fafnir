@@ -71,35 +71,37 @@ func (f *Fafnir) StartQueueDownloadWithCtx(ctx context.Context, queueName string
 	if err != nil {
 		return err
 	}
-LOOP:
-	if que == nil {
-		return ErrQueueNotFound
-	} else if len(que.Entries) == 0 {
-		return ErrEmptyQueue
-	} else {
-		for w := 1; w <= int(f.Cfg.MaxConcurrentDownloads); w++ {
-			go f.download(ctx, wg, que, jobsChan)
-		}
 
-		for len(que.Entries) > 0 {
-			j, err := que.DeQueue()
-			if err != nil {
-				continue
+	for {
+		if que == nil {
+			return ErrQueueNotFound
+		} else if len(que.Entries) == 0 {
+			return ErrEmptyQueue
+		} else {
+			for w := 1; w <= int(f.Cfg.MaxConcurrentDownloads); w++ {
+				go f.download(ctx, wg, que, jobsChan)
 			}
-			if j.ExtraData.FailCount >= int(f.Cfg.MaxFailError) {
-				err := que.EnQueueFail(j)
+
+			for len(que.Entries) > 0 {
+				j, err := que.DeQueue()
 				if err != nil {
-					f.Cfg.ErrChan <- err
+					continue
 				}
-				continue
+				if j.ExtraData.FailCount >= int(f.Cfg.MaxFailError) {
+					err := que.EnQueueFail(j)
+					if err != nil {
+						f.Cfg.ErrChan <- err
+					}
+					continue
+				}
+				wg.Add(1)
+				jobsChan <- j
 			}
-			wg.Add(1)
-			jobsChan <- j
 		}
-	}
-	wg.Wait()
-	if len(que.Entries) > 0 {
-		goto LOOP
+		wg.Wait()
+		if len(que.Entries) == 0 {
+			break
+		}
 	}
 	if len(que.Entries) == 0 && len(que.FailedEntries) == 0 {
 		err = f.Cfg.Repo.Delete(queueName)
