@@ -1,4 +1,4 @@
-module github.com/khatibomar/fafnir
+module codeberg.org/omarkhatib/fafnir
 
 go 1.17
 
