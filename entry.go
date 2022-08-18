@@ -4,16 +4,17 @@ import "time"
 
 type EntryRepository interface {
 	Update(Entry) error
-	Add(string, string, string, string) error
+	Add(string, string, string, string, string) error
 	Complete(Entry) error
 }
 
 type Entry struct {
-	ID        int
-	Filename  string
-	DwnDir    string
-	Url       string
-	ExtraData EntryExtraData
+	ID          int
+	Filename    string
+	DwnDir      string
+	Url         string
+	Description string
+	ExtraData   EntryExtraData
 }
 
 type EntryExtraData struct {

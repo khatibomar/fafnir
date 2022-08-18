@@ -4,7 +4,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/khatibomar/fafnir"
+	"codeberg.org/omarkhatib/fafnir"
 )
 
 var (
@@ -37,7 +37,7 @@ func (repo *InMemoryRepo) Update(e fafnir.Entry) error {
 	return nil
 }
 
-func (repo *InMemoryRepo) Add(queueName, link, dwnDir, filename string) error {
+func (repo *InMemoryRepo) Add(queueName, link, dwnDir, filename, description string) error {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
 	var e fafnir.Entry
@@ -45,6 +45,7 @@ func (repo *InMemoryRepo) Add(queueName, link, dwnDir, filename string) error {
 	e.Filename = filename
 	e.DwnDir = dwnDir
 	e.Url = link
+	e.Description = description
 	for _, q := range repo.Queues {
 		if queueName == q.Name {
 			e.ID = repo.EID

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/khatibomar/fafnir"
+	"codeberg.org/omarkhatib/fafnir"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -18,6 +18,7 @@ const (
         "id"    INTEGER PRIMARY KEY AUTOINCREMENT,
 		"filename" VARCHAR(150) NOT NULL,
 		"dwn_dir" VARCHAR(150) NOT NULL,
+		"description" VARCHAR(150) NOT NULL,
 		"url" VARCHAR(250) NOT NULL UNIQUE,
 		"fail_count"      INTEGER DEFAULT 0,
 		"size" INTEGER DEFAULT 0,
@@ -70,14 +71,14 @@ func (r *dbRepo) Update(e fafnir.Entry) error {
 	r.Lock()
 	defer r.Unlock()
 	updStmt, err := r.db.Prepare(
-		"UPDATE entry SET filename=?, dwn_dir=?, url=?, fail_count=?,size=?,bytes_transfered=?,bytes_per_second=?,eta=?,err=?,duration=?,can_resume=?,did_resume=?,start_time=?,end_time=?,progress=? WHERE id=?")
+		"UPDATE entry SET description=?,filename=?, dwn_dir=?, url=?, fail_count=?,size=?,bytes_transfered=?,bytes_per_second=?,eta=?,err=?,duration=?,can_resume=?,did_resume=?,start_time=?,end_time=?,progress=? WHERE id=?")
 	if err != nil {
 		return err
 	}
 	defer updStmt.Close()
 
 	// Exec UPDATE statement
-	res, err := updStmt.Exec(e.Filename, e.DwnDir, e.Url, e.ExtraData.FailCount, e.ExtraData.Size, e.ExtraData.BytesTransfered, e.ExtraData.BytesPerSecond, e.ExtraData.ETA, e.ExtraData.Err.Error(), e.ExtraData.Duration, e.ExtraData.CanResume, e.ExtraData.DidResume, e.ExtraData.Start, e.ExtraData.End, e.ExtraData.Progress, e.ID)
+	res, err := updStmt.Exec(e.Description, e.Filename, e.DwnDir, e.Url, e.ExtraData.FailCount, e.ExtraData.Size, e.ExtraData.BytesTransfered, e.ExtraData.BytesPerSecond, e.ExtraData.ETA, e.ExtraData.Err.Error(), e.ExtraData.Duration, e.ExtraData.CanResume, e.ExtraData.DidResume, e.ExtraData.Start, e.ExtraData.End, e.ExtraData.Progress, e.ID)
 	if err != nil {
 		return err
 	}
@@ -93,7 +94,7 @@ func (r *dbRepo) Update(e fafnir.Entry) error {
 	return nil
 }
 
-func (r *dbRepo) Add(queueName, link, dwnDir, filename string) error {
+func (r *dbRepo) Add(queueName, link, dwnDir, filename, description string) error {
 	r.Lock()
 	defer r.Unlock()
 
@@ -109,7 +110,7 @@ func (r *dbRepo) Add(queueName, link, dwnDir, filename string) error {
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, "INSERT INTO entry(queue_id , url , dwn_dir, filename ) VALUES (?,?,?,?)", qid, link, dwnDir, filename)
+	_, err = tx.ExecContext(ctx, "INSERT INTO entry(queue_id , url , dwn_dir, filename, description) VALUES (?,?,?,?)", qid, link, dwnDir, filename, description)
 	if err != nil {
 		return err
 	}
@@ -189,6 +190,7 @@ func (r *dbRepo) Get(queueName string, errChan chan error) (*fafnir.Queue, error
 		Filename        string
 		DwnDir          string
 		Url             string
+		Description     string
 		FailCount       int
 		Size            int64
 		BytesTransfered int64
@@ -206,7 +208,7 @@ func (r *dbRepo) Get(queueName string, errChan chan error) (*fafnir.Queue, error
 	)
 
 	for rows.Next() {
-		err = rows.Scan(&QID, &ID, &Filename, &DwnDir, &Url, &FailCount, &Size, &BytesTransfered, &BytesPerSecond, &ETA, &Err, &Duration, &CanResume, &DidResume, &Start, &End, &Progress, &trash1, &trash2)
+		err = rows.Scan(&QID, &ID, &Filename, &DwnDir, &Description, &Url, &FailCount, &Size, &BytesTransfered, &BytesPerSecond, &ETA, &Err, &Duration, &CanResume, &DidResume, &Start, &End, &Progress, &trash1, &trash2)
 		if err != nil {
 			errChan <- err
 		}
@@ -214,6 +216,7 @@ func (r *dbRepo) Get(queueName string, errChan chan error) (*fafnir.Queue, error
 		e.Filename = Filename
 		e.DwnDir = DwnDir
 		e.Url = Url
+		e.Description = Description
 		e.ExtraData.FailCount = FailCount
 		e.ExtraData.Size = Size
 		e.ExtraData.BytesTransfered = BytesTransfered

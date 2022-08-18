@@ -52,9 +52,9 @@ func New(cfg *Config) (*Fafnir, error) {
 	}, nil
 }
 
-func (f *Fafnir) Add(queueName, link, dwnDir, filename string) error {
+func (f *Fafnir) Add(queueName, link, dwnDir, filename, description string) error {
 	f.Cfg.Repo.Create(queueName)
-	return f.Cfg.Repo.Add(queueName, link, dwnDir, filename)
+	return f.Cfg.Repo.Add(queueName, link, dwnDir, filename, description)
 }
 
 func (f *Fafnir) StartQueueDownload(queueName string) error {
