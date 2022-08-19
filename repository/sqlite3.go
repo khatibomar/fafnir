@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"path"
 	"sync"
 	"time"
 
@@ -45,8 +46,8 @@ type dbRepo struct {
 	sync.RWMutex
 }
 
-func NewSQLite3Repo(dbfile string) (*dbRepo, error) {
-	db, err := sql.Open("sqlite3", dbfile)
+func NewSQLite3Repo(dbfile, directory string) (*dbRepo, error) {
+	db, err := sql.Open(path.Join(directory, "sqlite3"), dbfile)
 	if err != nil {
 		return nil, err
 	}
