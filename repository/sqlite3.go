@@ -47,7 +47,7 @@ type dbRepo struct {
 }
 
 func NewSQLite3Repo(dbfile, directory string) (*dbRepo, error) {
-	db, err := sql.Open(path.Join(directory, "sqlite3"), dbfile)
+	db, err := sql.Open("sqlite3", path.Join(directory, dbfile))
 	if err != nil {
 		return nil, err
 	}
