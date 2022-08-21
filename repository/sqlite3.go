@@ -47,7 +47,7 @@ type dbRepo struct {
 }
 
 func NewSQLite3Repo(dbfile, directory string) (*dbRepo, error) {
-	db, err := sql.Open("sqlite3", path.Join(directory, dbfile))
+	db, err := sql.Open("sqlite3", path.Join(directory, dbfile, ".db"))
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func (r *dbRepo) Update(e fafnir.Entry) error {
 		return err
 	}
 	if ra != 1 {
-		return fmt.Errorf("Excpected exactly 1 row to be affected got %d", ra)
+		return fmt.Errorf("excpected exactly 1 row to be affected got %d", ra)
 	}
 	return nil
 }

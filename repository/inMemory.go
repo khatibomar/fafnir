@@ -8,9 +8,9 @@ import (
 )
 
 var (
-	ErrQueueNotFound     = errors.New("Queue Not found")
-	ErrQueueAlreadyExist = errors.New("Queue Already Exist")
-	ErrEntryNotFound     = errors.New("Entry Not found")
+	ErrQueueNotFound     = errors.New("queue Not found")
+	ErrQueueAlreadyExist = errors.New("queue Already Exist")
+	ErrEntryNotFound     = errors.New("entry Not found")
 )
 
 type InMemoryRepo struct {
