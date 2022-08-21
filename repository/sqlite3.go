@@ -47,7 +47,7 @@ type dbRepo struct {
 }
 
 func NewSQLite3Repo(dbfile, directory string) (*dbRepo, error) {
-	db, err := sql.Open("sqlite3", path.Join(directory, dbfile, ".db"))
+	db, err := sql.Open("sqlite3", path.Join(directory, fmt.Sprintf("%s.db", dbfile)))
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func (r *dbRepo) Add(queueName, link, dwnDir, filename, description string) erro
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, "INSERT INTO entry(queue_id , url , dwn_dir, filename, description) VALUES (?,?,?,?)", qid, link, dwnDir, filename, description)
+	_, err = tx.ExecContext(ctx, "INSERT INTO entry(queue_id , url , dwn_dir, filename, description) VALUES (?,?,?,?,?)", qid, link, dwnDir, filename, description)
 	if err != nil {
 		return err
 	}
