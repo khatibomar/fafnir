@@ -2,6 +2,7 @@ package fafnir
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 )
 
@@ -64,4 +65,16 @@ func (q *Queue) DeQueueFail() (Entry, error) {
 	e := q.FailedEntries[0]
 	q.FailedEntries = q.FailedEntries[1:]
 	return e, nil
+}
+
+func (q *Queue) SortByName(descending bool) {
+	if descending {
+		sort.Slice(q.Entries, func(i, j int) bool {
+			return sortName(q.Entries[i].Filename) > sortName(q.Entries[j].Filename)
+		})
+	} else {
+		sort.Slice(q.Entries, func(i, j int) bool {
+			return sortName(q.Entries[i].Filename) < sortName(q.Entries[j].Filename)
+		})
+	}
 }

@@ -57,6 +57,15 @@ func (f *Fafnir) Add(queueName, link, dwnDir, filename, description string) erro
 	return f.Cfg.Repo.Add(queueName, link, dwnDir, filename, description)
 }
 
+func (f *Fafnir) SortByName(queueName string, descending bool) error {
+	q, err := f.Cfg.Repo.Get(queueName, f.Cfg.ErrChan)
+	if err != nil {
+		return err
+	}
+	q.SortByName(descending)
+	return nil
+}
+
 func (f *Fafnir) StartQueueDownload(queueName string) error {
 	return f.StartQueueDownloadWithCtx(context.Background(), queueName)
 }
@@ -139,7 +148,6 @@ func (f *Fafnir) download(ctx context.Context, wg *sync.WaitGroup, queue *Queue,
 		resp := client.Do(req)
 
 		t := time.NewTicker(time.Duration(f.Cfg.UpdateTimeMs) * time.Millisecond)
-		defer t.Stop()
 		func(e Entry) {
 			for {
 				select {
@@ -175,6 +183,7 @@ func (f *Fafnir) download(ctx context.Context, wg *sync.WaitGroup, queue *Queue,
 					wg.Done()
 					return
 				case <-ctx.Done():
+					t.Stop()
 					e.ExtraData.FailCount++
 					err := resp.Cancel()
 					if err != nil {
