@@ -20,7 +20,7 @@ type InMemoryRepo struct {
 	EID     int
 }
 
-func NewInMemoryRepo() *InMemoryRepo {
+func NewInMemory() *InMemoryRepo {
 	return &InMemoryRepo{
 		Queues:  make([]*fafnir.Queue, 0),
 		Entries: make([]fafnir.Entry, 0),
