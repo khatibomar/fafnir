@@ -4,7 +4,7 @@ import (
 	"errors"
 	"sync"
 
-	"codeberg.org/omarkhatib/fafnir"
+	"github.com/khatibomar/fafnir"
 )
 
 var (
