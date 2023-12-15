@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"codeberg.org/omarkhatib/fafnir"
+	"github.com/khatibomar/fafnir"
 	_ "github.com/mattn/go-sqlite3"
 )
 
